@@ -1,17 +1,17 @@
 
-function! s:fib(n)
+function! Fib(n)
     if a:n == 0 || a:n == 1
         return a:n
     else
-        return s:fib(a:n - 1) + s:fib(a:n - 2)
+        return Fib(a:n - 1) + Fib(a:n - 2)
     endif
 endfunction
-let p1 = mps#new_funcref(function("s:fib"), [30])
+let p1 = mps#new_funcref(function("Fib"), [30])
 
 
 let f = {}
 function! f.call(n)
-    return s:fib(a:n)
+    return Fib(a:n)
 endfunction
 let p2 = mps#new_dict(f, 'call', [30])
 
