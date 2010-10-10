@@ -24,6 +24,11 @@ endfunction "}}}
 " Implementation {{{
 let s:multiprocessing = {}
 
+" Spawn vim server.
+function! s:multiprocessing.spawn(vim_option_arguments) "{{{
+    " TODO
+endfunction "}}}
+
 function! s:multiprocessing.start() "{{{
     " TODO
 endfunction "}}}
