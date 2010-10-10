@@ -16,7 +16,7 @@ function! mps#new(F, args, ...) "{{{
     if a:0
         let o.__dict = a:1
     endif
-    return  o
+    return o
 endfunction "}}}
 
 " }}}
