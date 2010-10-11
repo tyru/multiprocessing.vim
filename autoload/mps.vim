@@ -8,7 +8,7 @@ set cpo&vim
 
 
 if !exists('g:mps_vim_path')
-    let g:mps_vim_path = 'gvim'
+    let g:mps_vim_path = 'vim'
 endif
 
 
