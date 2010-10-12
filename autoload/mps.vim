@@ -24,9 +24,10 @@ function! mps#new_funcref(F, args) "{{{
     silent function a:F
     redir END
 
-    let o.__func_body = s:get_func_body_from_output(output)
+    let o.__func_lines = s:get_func_lines_from_output(output)
     let o.__args = a:args
     let o.__session_id = s:create_session_id()
+    let o.__client_name = v:servername
 
     return o
 endfunction "}}}
@@ -34,27 +35,31 @@ endfunction "}}}
 function! mps#new_dict(dict, key, args) "{{{
     let o = deepcopy(s:multiprocessing)
 
-    redir => output
-    silent function a:dict[a:key]
-    redir END
+    let save_list = &l:list
+    setlocal nolist
+    try
+        redir => output
+        silent function a:dict[a:key]
+        redir END
+    finally
+        let &l:list = save_list
+    endtry
 
-    let o.__func_body = s:get_func_body_from_output(output)
+    let o.__func_lines = s:get_func_lines_from_output(output)
     let o.__args = a:args
     let o.__session_id = s:create_session_id()
+    let o.__client_name = v:servername
 
     return o
 endfunction "}}}
 
-function! s:get_func_body_from_output(output) "{{{
-    return join(
-    \   map(
-    \       split(
-    \           matchstr(a:output, '^\s*\zs.\{-}\ze\s*$'),
-    \           "\n"
-    \       ),
-    \       'substitute(v:val, "^\\d\\+", "", "")'
-    \   ),
-    \   "\n"
+function! s:get_func_lines_from_output(output) "{{{
+    return map(
+    \   split(
+    \       matchstr(a:output, '^\s*\zs.\{-}\ze\s*$'),
+    \       "\n"
+    \   )[1:-2],
+    \   'substitute(v:val, "^\\d\\+", "", "")'
     \)
 endfunction "}}}
 
@@ -78,6 +83,10 @@ function! s:spawn_error(msg) "{{{
     return 'mps: spawn error: ' . a:msg
 endfunction "}}}
 
+function! s:mpsserver_error(msg) "{{{
+    return 'mps: mpsserver error: ' . a:msg
+endfunction "}}}
+
 
 
 let s:multiprocessing = {
@@ -92,12 +101,41 @@ function! s:multiprocessing.spawn_server() "{{{
     endif
 
     let self.__servername = s:create_server_name()
-    call system(
-    \   g:mps_vim_path
-    \   . ' -u NONE -i NONE'
-    \   . ' --servername ' . self.__servername
-    \   . ' -E -s'
-    \)
+    let mpsserver_path = globpath(&rtp, 'autoload/mps/__mpsserver__.vim')
+    if mpsserver_path == ''
+        throw s:mpsserver_error('__mpsserver__.vim is not found.')
+    endif
+    let mpsserver_path = split(mpsserver_path, '\n')[0]
+
+    let options = {
+    \   '&shell': &shell,
+    \   '&shellcmdflag': &shellcmdflag,
+    \}
+    " let options = {
+    " \   '&shell': &shell,
+    " \   '&shellcmdflag': &shellcmdflag,
+    " \   '&shellxquote': &shellxquote,
+    " \   '&shellredir': &shellredir,
+    " \}
+    setlocal shell=/bin/sh shellcmdflag=-c
+    " setlocal shellxquote= shellredir=>%s\ 2>&1
+
+    try
+        Decho 'spawing server...'
+        execute 'silent !'
+        \   . g:mps_vim_path
+        \   . ' -u NONE -i NONE'
+        \   . ' --servername ' . self.__servername
+        \   . ' -S "' . mpsserver_path . '"'
+        \   . ' -c "call MpsServerRun('
+        \       . string(self.__func_lines)
+        \   . ')"'
+        \   . ' -e -s &'
+    finally
+        for [k, v] in items(options)
+            call setbufvar('%', k, v)
+        endfor
+    endtry
 
     let success = 0
     if v:shell_error != success
@@ -114,22 +152,9 @@ function! s:multiprocessing.kill_server() "{{{
         return
     endif
 
-    " XXX: If server is not in normal mode?
-    call self.send_string(':<C-u>qall!<CR>')
+    " TODO
 
     let self.__has_spawned = 0
-endfunction "}}}
-
-" Send string to vim server.
-function! s:multiprocessing.send_string(str) "{{{
-    if !self.__has_spawned
-        return
-    endif
-    call remote_send(
-    \   self.__servername,
-    \   a:str,
-    \   's:multiprocessing_result_' . self.__session_id
-    \)
 endfunction "}}}
 
 " Start processing.
@@ -141,27 +166,16 @@ function! s:multiprocessing.start() "{{{
     " Set "self.__servername".
     call self.spawn_server()
 
-    " TODO: escape
-    let str = join([
-    \   'function! Dummy(...)',
-    \   self.__func_body,
-    \   'endfunction',
-    \], "\n")
-    call self.send_string(str)
 
     let self.__has_started = 1
 endfunction "}}}
 
 " Read the result.
 function! s:multiprocessing.join() "{{{
-    try
-        call self.start()
-        return remote_read(
-        \   s:multiprocessing_result_{self.__session_id}
-        \)
-    finally
-        call self.kill_server()
-    endtry
+    Decho 'starting process...'
+    call self.start()
+    Decho 'checking the result...:' . self.__client_name . ' => ' . self.__servername
+    return remote_expr(self.__servername, 'call("F", '.string(self.__args).')')
 endfunction "}}}
 
 " }}}

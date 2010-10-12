@@ -16,5 +16,11 @@ endfunction
 let p2 = mps#new_dict(f, 'call', [30])
 
 
+call p1.start()
+echo 'p1:' serverlist()
+call p2.start()
+echo 'p2:' serverlist()
+
+sleep 1
 echo p1.join()
 echo p2.join()
